@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  USER
+  HOD
+  FINANCE
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_HOD_APPROVAL
+  HOD_APPROVED
+  PENDING_FINANCE_APPROVAL
+  FINANCE_APPROVED
+  FINANCE_REJECTED
+  NEEDS_REVIEW
+  RESUBMITTED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+  WAITING
+}
+
+enum FinanceAction {
+  APPROVED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum NotificationType {
+  APPROVAL_REQUIRED
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  FINANCE_REVIEW
+  STATUS_UPDATE
+  COMMENT_ADDED
+  NEEDS_REVIEW
+}
+
+// ─────────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────────
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users        User[]
+  hodHierarchy HODHierarchy[]
+
+  @@index([code])
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  name            String
+  email           String   @unique
+  password        String
+  role            Role     @default(USER)
+  departmentId    Int
+  approvalLimit   Decimal  @default(0) @db.Decimal(15, 2)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+  loginHistory LoginHistory[]
+  department       Department     @relation(fields: [departmentId], references: [id])
+  fundRequests     FundRequest[]  @relation("RequestCreator")
+  approvalSteps    ApprovalStep[] @relation("StepApprover")
+  financeReviews   FinanceReview[]
+  comments         Comment[]
+  notifications    Notification[] @relation("NotificationRecipient")
+  otpTokens OTPToken[]
+  workflowHistory  WorkflowHistory[]
+  hodLevel         HODHierarchy?  @relation("HODUser")
+
+  @@index([email])
+  @@index([role])
+  @@index([departmentId])
+}
+
+model HODHierarchy {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  departmentId Int
+  level        Int      // 1 = first approver, 2 = second, etc.
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation("HODUser", fields: [userId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, level])
+  @@index([departmentId, level])
+}
+
+model FundRequest {
+  id              Int           @id @default(autoincrement())
+  requestNumber   String        @unique
+  title           String
+  description     String        @db.Text
+  amount          Decimal       @db.Decimal(15, 2)
+  purpose         String?
+  status          RequestStatus @default(DRAFT)
+  createdById     Int
+  currentLevel    Int           @default(0) // current HOD level being processed
+  totalHodLevels  Int           @default(0)
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  startDate       DateTime?
+  endDate         DateTime?
+  isModified      Boolean   @default(false)
+  modifiedAt      DateTime?
+  modifiedCount   Int       @default(0)
+  fundUsed        Boolean   @default(false)
+  fundReturnNote  String?   @db.Text
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  viewedByHODAt     DateTime?
+  viewedByFinanceAt DateTime?
+  isLockedForEdit   Boolean   @default(false)
+
+  createdBy       User            @relation("RequestCreator", fields: [createdById], references: [id])
+  approvalSteps   ApprovalStep[]
+  financeReviews  FinanceReview[]
+  comments        Comment[]
+  attachments     Attachment[]
+  notifications   Notification[]
+  workflowHistory WorkflowHistory[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([requestNumber])
+}
+
+model ApprovalStep {
+  id             Int            @id @default(autoincrement())
+  fundRequestId  Int
+  approverId     Int
+  hodLevel       Int
+  status         ApprovalStatus @default(WAITING)
+  remarks        String?        @db.Text
+  actionAt       DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  approver    User        @relation("StepApprover", fields: [approverId], references: [id])
+
+  @@index([fundRequestId])
+  @@index([approverId])
+  @@index([status])
+}
+
+model FinanceReview {
+  id            Int           @id @default(autoincrement())
+  fundRequestId Int
+  reviewedById  Int
+  action        FinanceAction
+  remarks       String?       @db.Text
+  reviewedAt    DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  reviewedBy  User        @relation(fields: [reviewedById], references: [id])
+
+  @@index([fundRequestId])
+  @@index([reviewedById])
+}
+
+model Comment {
+  id            Int      @id @default(autoincrement())
+  fundRequestId Int
+  userId        Int
+  content       String   @db.Text
+  isDeleted     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([fundRequestId])
+}
+
+model Attachment {
+  id            Int      @id @default(autoincrement())
+  fundRequestId Int
+  fileName      String
+  originalName  String
+  fileType      String
+  fileSize      Int
+  filePath      String
+  uploadedAt    DateTime @default(now())
+  isDeleted     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+
+  @@index([fundRequestId])
+}
+
+model Notification {
+  id            Int              @id @default(autoincrement())
+  userId        Int
+  fundRequestId Int?
+  type          NotificationType
+  title         String
+  message       String           @db.Text
+  isRead        Boolean          @default(false)
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user        User         @relation("NotificationRecipient", fields: [userId], references: [id])
+  fundRequest FundRequest? @relation(fields: [fundRequestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([fundRequestId])
+}
+model OTPToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+model WorkflowHistory {
+  id            Int      @id @default(autoincrement())
+  fundRequestId Int
+  actorId       Int
+  actorRole     Role
+  action        String
+  fromStatus    RequestStatus?
+  toStatus      RequestStatus?
+  remarks       String?  @db.Text
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  actor       User        @relation(fields: [actorId], references: [id])
+
+  @@index([fundRequestId])
+  @@index([actorId])
+}
+model LoginHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     // null if email doesn't exist
+  email     String
+  action    String   // 'REGISTER' | 'OTP_REQUEST' | 'LOGIN_SUCCESS' | 'LOGIN_FAILED'
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+}
