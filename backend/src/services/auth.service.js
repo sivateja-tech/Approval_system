@@ -24,7 +24,6 @@ const logHistory = async (email, action, userId = null, req = null) => {
 const requestOTP = async (email, req = null) => {
   const user = await prisma.user.findUnique({ where: { email }, include: { department: true } });
   
-  // Fire-and-forget: Do not await logging
   logHistory(email, 'OTP_REQUEST', user?.id || null, req).catch(console.error);
   
   if (!user || !user.isActive) {
@@ -40,12 +39,10 @@ const requestOTP = async (email, req = null) => {
   const otp = generateOTP();
   const expiresAt = getOTPExpiry();
   
-  // Fast hashing using native crypto (replaces bcrypt)
   const hashed = crypto.createHash('sha256').update(otp).digest('hex');
   
   await prisma.oTPToken.create({ data: { userId: user.id, token: hashed, expiresAt } });
   
-  // Fire-and-forget: Do not await the email network request
   sendOTPEmail(user.email, user.name, otp).catch(err => console.error('Email error:', err));
   
   console.log(otp);
@@ -55,7 +52,7 @@ const requestOTP = async (email, req = null) => {
 const verifyOTP = async (email, otp, req = null) => {
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { department: true, hodLevel: true },
+    include: { department: true, approvalHierarchy: true }, // Updated
   });
 
   if (!user || !user.isActive) {
@@ -74,11 +71,9 @@ const verifyOTP = async (email, otp, req = null) => {
 
   if (!otpRecord) {
     logHistory(email, 'LOGIN_FAILED', user.id, req).catch(console.error);
-    // Generic error message prevents user enumeration attacks
     throw new Error('Invalid email or OTP. Please check and try again.'); 
   }
 
-  // Hash the incoming OTP using crypto to compare against the stored hash
   const hashedInput = crypto.createHash('sha256').update(otp).digest('hex');
   
   if (hashedInput !== otpRecord.token) {
@@ -98,7 +93,6 @@ const verifyOTP = async (email, otp, req = null) => {
   return { token, user: safe };
 };
 
-
 const updateProfile = async (userId, data) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error('User not found');
@@ -115,7 +109,7 @@ const updateProfile = async (userId, data) => {
   const updated = await prisma.user.update({
     where: { id: userId },
     data: updateData,
-    include: { department: true, hodLevel: true },
+    include: { department: true, approvalHierarchy: true }, // Updated
   });
 
   const { password: _, ...safe } = updated;
@@ -128,13 +122,11 @@ const getCurrentUser = async (userId) => {
     select: {
       id: true, name: true, email: true, role: true,
       approvalLimit: true, isActive: true, createdAt: true,
-      department: true, hodLevel: true,
+      department: true, approvalHierarchy: true, // Updated
     },
   });
   if (!user) throw new Error('User not found');
   return user;
 };
 
-
-
-module.exports = {  getCurrentUser, requestOTP, verifyOTP, updateProfile };
+module.exports = { getCurrentUser, requestOTP, verifyOTP, updateProfile };

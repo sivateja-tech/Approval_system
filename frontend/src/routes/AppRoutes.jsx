@@ -1,19 +1,25 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/UI/LoadingSpinner';
-import Register from '../pages/auth/Register';
+
+// Auth
+
 import Login from '../pages/auth/Login';
+
+// User
 import Dashboard from '../pages/user/Dashboard';
 import MyRequests from '../pages/user/MyRequests';
 import CreateRequest from '../pages/user/CreateRequest';
 import RequestDetails from '../pages/user/RequestDetails';
 import EditRequest from '../pages/user/EditRequest';
 
-import HODDashboard from '../pages/hod/HODDashboard';
-import PendingApprovals from '../pages/hod/PendingApprovals';
-import ApprovalHistory from '../pages/hod/ApprovalHistory';   // ← separate component
-import ApprovalDetails from '../pages/hod/ApprovalDetails';
+// Manager (Formerly HOD)
+import ManagerDashboard from '../pages/manager/ManagerDashboard';
+import PendingApprovals from '../pages/manager/PendingApprovals';
+import ApprovalHistory from '../pages/manager/ApprovalHistory';
+import ApprovalDetails from '../pages/manager/ApprovalDetails';
 
+// Finance
 import FinanceDashboard from '../pages/finance/FinanceDashboard';
 import FinanceQueue from '../pages/finance/FinanceQueue';
 import FinanceReviewDetails from '../pages/finance/FinanceReviewDetails';
@@ -28,7 +34,7 @@ const ProtectedRoute = ({ children, roles }) => {
 
 const RoleHome = () => {
   const { user } = useAuth();
-  if (user?.role === 'HOD')     return <Navigate to="/hod/dashboard" replace />;
+  if (user?.role === 'MANAGER') return <Navigate to="/manager/dashboard" replace />;
   if (user?.role === 'FINANCE') return <Navigate to="/finance/dashboard" replace />;
   return <Navigate to="/dashboard" replace />;
 };
@@ -36,30 +42,33 @@ const RoleHome = () => {
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/register" element={<Register />} />
+      
       <Route path="/login" element={<Login />} />
+      {/* Both Users and Managers should be allowed to access this component */}
+    
+    
 
       {/* USER */}
       <Route path="/dashboard"
         element={<ProtectedRoute roles={['USER']}><Dashboard /></ProtectedRoute>} />
       <Route path="/requests"
-        element={<ProtectedRoute roles={['USER']}><MyRequests /></ProtectedRoute>} />
+        element={<ProtectedRoute roles={['USER','MANAGER']}><MyRequests /></ProtectedRoute>} />
       <Route path="/requests/new"
-        element={<ProtectedRoute roles={['USER']}><CreateRequest /></ProtectedRoute>} />
+        element={<ProtectedRoute roles={['USER','MANAGER']}><CreateRequest /></ProtectedRoute>} />
       <Route path="/requests/:id"
-        element={<ProtectedRoute roles={['USER']}><RequestDetails /></ProtectedRoute>} />
+        element={<ProtectedRoute roles={['USER','MANAGER']}><RequestDetails /></ProtectedRoute>} />
       <Route path="/requests/:id/edit"
-        element={<ProtectedRoute roles={['USER']}><EditRequest /></ProtectedRoute>} />
+        element={<ProtectedRoute roles={['USER','MANAGER']}><EditRequest /></ProtectedRoute>} />
 
-      {/* HOD */}
-      <Route path="/hod/dashboard"
-        element={<ProtectedRoute roles={['HOD']}><HODDashboard /></ProtectedRoute>} />
-      <Route path="/hod/approvals"
-        element={<ProtectedRoute roles={['HOD']}><PendingApprovals /></ProtectedRoute>} />
-      <Route path="/hod/history"
-        element={<ProtectedRoute roles={['HOD']}><ApprovalHistory /></ProtectedRoute>} />  {/* ← FIXED */}
-      <Route path="/hod/requests/:id"
-        element={<ProtectedRoute roles={['HOD']}><ApprovalDetails /></ProtectedRoute>} />
+      {/* MANAGER */}
+      <Route path="/manager/dashboard"
+        element={<ProtectedRoute roles={['MANAGER']}><ManagerDashboard /></ProtectedRoute>} />
+      <Route path="/manager/approvals"
+        element={<ProtectedRoute roles={['MANAGER']}><PendingApprovals /></ProtectedRoute>} />
+      <Route path="/manager/history"
+        element={<ProtectedRoute roles={['MANAGER']}><ApprovalHistory /></ProtectedRoute>} />
+      <Route path="/manager/requests/:id"
+        element={<ProtectedRoute roles={['MANAGER']}><ApprovalDetails /></ProtectedRoute>} />
 
       {/* FINANCE */}
       <Route path="/finance/dashboard"

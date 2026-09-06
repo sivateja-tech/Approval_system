@@ -27,12 +27,12 @@ export default function ProfileModal({ onClose }) {
 
   const roleColors = {
     USER:    'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-    HOD:     'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+    MANAGER: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
     FINANCE: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   };
   const roleAvatarBg = {
-    USER: 'from-blue-500 to-blue-700',
-    HOD:  'from-purple-500 to-purple-700',
+    USER:    'from-blue-500 to-blue-700',
+    MANAGER: 'from-purple-500 to-purple-700',
     FINANCE: 'from-amber-500 to-amber-600',
   };
 
@@ -68,7 +68,7 @@ export default function ProfileModal({ onClose }) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400
-                                 uppercase tracking-wide">
+                                uppercase tracking-wide">
                 Full Name
               </label>
               {!editing ? (
@@ -104,14 +104,14 @@ export default function ProfileModal({ onClose }) {
 
           {/* Read-only fields */}
           {[
-            { label: 'Email',           value: user?.email },
-            { label: 'Role',            value: user?.role },
-            { label: 'Department',      value: user?.department?.name || '—' },
-            { label: 'Approval Limit',  value: user?.role === 'USER'
+            { label: 'Email',          value: user?.email },
+            { label: 'Role',           value: user?.role },
+            { label: 'Department',     value: user?.department?.name || '—' },
+            { label: 'Approval Limit', value: user?.role === 'USER'
                 ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
                     .format(user?.approvalLimit)
                 : 'N/A' },
-            { label: 'Member Since',    value: user?.createdAt
+            { label: 'Member Since',   value: user?.createdAt
                 ? new Date(user.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
                 : '—' },
           ].map(f => (

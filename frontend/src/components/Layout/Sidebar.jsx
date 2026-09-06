@@ -22,10 +22,11 @@ const NAV = {
     { to: '/requests',     label: 'My Requests', icon: D.list,    end: true },
     { to: '/requests/new', label: 'New Request', icon: D.plus,    end: true },
   ],
-  HOD:     [
-    { to: '/hod/dashboard', label: 'Dashboard',         icon: D.home,    end: true },
-    { to: '/hod/approvals', label: 'Pending Approvals', icon: D.clock,   end: true },
-    { to: '/hod/history',   label: 'Approval History',  icon: D.history, end: true },
+  // Updated from HOD to MANAGER and updated the route paths
+  MANAGER: [
+    { to: '/manager/dashboard', label: 'Dashboard',         icon: D.home,    end: true },
+    { to: '/manager/approvals', label: 'Pending Approvals', icon: D.clock,   end: true },
+    { to: '/manager/history',   label: 'Approval History',  icon: D.history, end: true },
   ],
   FINANCE: [
     { to: '/finance/dashboard', label: 'Dashboard',    icon: D.home,  end: true },
@@ -43,51 +44,31 @@ export default function Sidebar({ open, onClose }) {
         <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={onClose} />
       )}
       
-      
-<aside className={`
-  fixed md:static z-30 flex flex-col
-  w-56 h-full                           /* full height */
-  bg-white dark:bg-[#13151f]
-  border-r border-orange-100 dark:border-[#1e2235]
-  transform transition-transform duration-200
-  ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
-  overflow-y-auto                       /* scroll on small screens */
-`}>
+      <aside className={`
+        fixed md:static z-30 flex flex-col
+        w-56 h-full                            /* full height */
+        bg-white dark:bg-[#13151f]
+        border-r border-amber-100 dark:border-[#1e2235]
+        transform transition-transform duration-200
+        ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+        overflow-y-auto                        /* scroll on small screens */
+      `}>
 
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-4 py-4
-                        border-b border-orange-100 dark:border-[#1e2235]">
-          <div className="w-8 h-8 bg-orange-500 rounded-xl flex items-center
+                        border-b border-amber-100 dark:border-[#1e2235]">
+          <div className="w-8 h-8 bg-amber-500 rounded-xl flex items-center
                           justify-center text-white font-black text-sm shadow-lg
-                          shadow-orange-500/30">
+                          shadow-amber-500/30">
             ₹
           </div>
           <div className="min-w-0">
             <p className="text-xs font-black text-gray-900 dark:text-white leading-none">
               Fund Request
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-600 mt-0.5">
+            <p className="text-xs font-black text-gray-900 dark:text-white leading-none">
               Management System
             </p>
-          </div>
-        </div>
-
-        {/* User card */}
-        <div className="mx-3 mt-3 mb-1 p-3 bg-orange-50 dark:bg-[#1a1d2e]
-                        border border-orange-100 dark:border-[#2a2d3e] rounded-xl">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center
-                            justify-center text-white font-black text-sm flex-shrink-0">
-              {user?.name?.charAt(0)?.toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                {user?.name}
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                {user?.role} · {user?.department?.name}
-              </p>
-            </div>
           </div>
         </div>
 
@@ -107,8 +88,8 @@ export default function Sidebar({ open, onClose }) {
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium',
                 'transition-all duration-150',
                 isActive
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-[#1a1d2e] hover:text-orange-600 dark:hover:text-orange-400',
+                  ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-amber-50 dark:hover:bg-[#1a1d2e] hover:text-amber-600 dark:hover:text-amber-400',
               ].join(' ')}
             >
               <SVG d={item.icon} />
@@ -117,12 +98,6 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </nav>
 
-        {/* Footer */}
-        <div className="px-3 pb-4 pt-2 border-t border-orange-100 dark:border-[#1e2235]">
-          <p className="text-xs text-gray-300 dark:text-gray-700 text-center">
-           Fund Request System
-          </p>
-        </div>
       </aside>
     </>
   );

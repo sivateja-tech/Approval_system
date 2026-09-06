@@ -1,11 +1,21 @@
 const { error } = require('../utils/response.util');
 
-const authorize = (...roles) => {
+/**
+ * Authorize users based on their roles.
+ * Usage: router.use(authorize('MANAGER', 'FINANCE'))
+ */
+const authorize = (...allowedRoles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return error(res, 'Access denied. Insufficient permissions.', 403);
+    if (!req.user || !req.user.role) {
+      return error(res, 'Unauthorized - No role found', 401);
     }
-    next();
+
+    // If the route allows anyone, or if the user's role is in the allowed list
+    if (allowedRoles.includes('ANY') || allowedRoles.includes(req.user.role)) {
+      return next();
+    }
+
+    return error(res, 'Forbidden - Insufficient permissions', 403);
   };
 };
 

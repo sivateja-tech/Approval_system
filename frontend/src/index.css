@@ -28,7 +28,7 @@
   select, textarea {
     @apply bg-white dark:bg-[#1a1d2e]
            text-gray-900 dark:text-gray-100
-           border-orange-200 dark:border-[#2a2d3e];
+           border-amber-200 dark:border-[#2a2d3e];
   }
   input::placeholder, textarea::placeholder {
     @apply text-gray-400 dark:text-gray-600;
@@ -40,7 +40,7 @@
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply bg-orange-200 dark:bg-[#2a2d3e];
+    @apply bg-amber-200 dark:bg-[#2a2d3e];
     border-radius: 999px;
   }
 }

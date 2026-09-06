@@ -1,3 +1,8 @@
+// src/components/Layout/Layout.jsx
+//
+// Change: removed the unused NotificationBell import.
+// The bell now lives inside Navbar.jsx where it belongs.
+
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Navbar  from './Navbar';

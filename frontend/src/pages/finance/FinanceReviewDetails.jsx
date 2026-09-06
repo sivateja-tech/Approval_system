@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getFinanceRequestDetails, financeApprove, financeReject, financeNeedsReview } from '../../api/finance.api';
+import { getFinanceRequestDetails, financeApprove, financeReject } from '../../api/finance.api';
 import api from '../../api/axios';
 import Layout from '../../components/Layout/Layout';
 import StatusBadge from '../../components/UI/StatusBadge';
@@ -11,18 +11,26 @@ import toast from 'react-hot-toast';
 const STEP_STYLE = {
   APPROVED: { bg: 'bg-green-50 dark:bg-green-500/10', border: 'border-green-200 dark:border-green-500/20', text: 'text-green-700 dark:text-green-400', dot: 'bg-green-500',  label: '✓ Approved' },
   REJECTED: { bg: 'bg-red-50   dark:bg-red-500/10',   border: 'border-red-200   dark:border-red-500/20',   text: 'text-red-700   dark:text-red-400',   dot: 'bg-red-500',    label: '✕ Rejected' },
-  PENDING:  { bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500',  label: '⏳ Pending'  },
+  PENDING:  { bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500 animate-pulse',  label: '⏳ Pending'  },
   WAITING:  { bg: 'bg-gray-50  dark:bg-gray-800/30',  border: 'border-gray-200  dark:border-gray-700/40',  text: 'text-gray-500  dark:text-gray-500',  dot: 'bg-gray-300 dark:bg-gray-600', label: '— Waiting'  },
+  SKIPPED:  { bg: 'bg-gray-50  dark:bg-gray-800/10',  border: 'border-gray-200  dark:border-gray-700/30',  text: 'text-gray-400  dark:text-gray-600',  dot: 'bg-gray-200 dark:bg-gray-700', label: '⏭️ Skipped' },
 };
 
 const TIMELINE_LABELS = {
-  SUBMITTED_FOR_HOD_APPROVAL: { label: 'Submitted for HOD approval', color: 'bg-blue-500',   icon: '📤' },
-  SUBMITTED_TO_FINANCE:       { label: 'Submitted to Finance',       color: 'bg-blue-500',   icon: '📤' },
-  HOD_APPROVED:               { label: 'Approved by HOD',            color: 'bg-green-500',  icon: '✓'  },
-  HOD_REJECTED:               { label: 'Rejected by HOD',            color: 'bg-red-500',    icon: '✕'  },
-  FINANCE_APPROVED:           { label: 'Approved by Finance',        color: 'bg-green-500',  icon: '✓'  },
-  FINANCE_REJECTED:           { label: 'Rejected by Finance',        color: 'bg-red-500',    icon: '✕'  },
-  MARKED_NEEDS_REVIEW:        { label: 'Sent back for revision',     color: 'bg-orange-500', icon: '🔄' },
+  SUBMITTED:                      { label: 'Request Submitted',                 color: 'bg-blue-500',   icon: '📤' },
+  SUBMITTED_FOR_MANAGER_APPROVAL: { label: 'Submitted for Manager approval',      color: 'bg-blue-500',   icon: '📤' },
+  BYPASSED_TO_FINANCE:            { label: 'Bypassed managers → sent to Finance', color: 'bg-blue-500',   icon: '⏭️' },
+  SUBMITTED_TO_FINANCE:           { label: 'Submitted to Finance',                color: 'bg-blue-500',   icon: '📤' },
+  RESUBMITTED:                    { label: 'Request Resubmitted',                 color: 'bg-blue-500',   icon: '🔄' },
+  WORKFLOW_RECALCULATED:          { label: 'Approval chain recalculated',         color: 'bg-purple-500', icon: '⚙️' },
+  MANAGER_APPROVED:               { label: 'Approved by Manager',                 color: 'bg-green-500',  icon: '✓'  },
+  MANAGER_REJECTED:               { label: 'Rejected by Manager',                 color: 'bg-red-500',    icon: '✕'  },
+  FINANCE_APPROVED:               { label: 'Approved by Finance',                 color: 'bg-green-500',  icon: '✓'  },
+  FINANCE_REJECTED:               { label: 'Rejected by Finance',                 color: 'bg-red-500',    icon: '✕'  },
+  FINANCE_NEEDS_REVIEW:           { label: 'Sent back for revision',              color: 'bg-amber-500',  icon: '🔄' },
+  MARKED_NEEDS_REVIEW:            { label: 'Sent back for revision',              color: 'bg-amber-500',  icon: '🔄' },
+  CANCELLED:                      { label: 'Request Cancelled',                   color: 'bg-gray-500',   icon: '✕'  },
+  SKIPPED:                        { label: 'Skipped',                             color: 'bg-gray-400',   icon: '⏭️' },
 };
 
 const dedupeHistory = (h = []) => {
@@ -34,7 +42,7 @@ const dedupeHistory = (h = []) => {
   });
 };
 
-const card = 'bg-white dark:bg-black border border-orange-100 dark:border-orange-500/15 rounded-2xl';
+const card = 'bg-white dark:bg-black border border-amber-100 dark:border-amber-500/15 rounded-2xl';
 
 export default function FinanceReviewDetails() {
   const { id }     = useParams();
@@ -63,7 +71,7 @@ export default function FinanceReviewDetails() {
   }, [id]);
 
   const handleAction = async (type) => {
-    if ((type === 'reject' || type === 'review') && !remarks.trim()) {
+    if (type === 'reject' && !remarks.trim()) {
       toast.error('Remarks are required for this action');
       return;
     }
@@ -75,17 +83,25 @@ export default function FinanceReviewDetails() {
     try {
       if (type === 'approve') await financeApprove(id, { remarks });
       if (type === 'reject')  await financeReject(id, { remarks });
-      if (type === 'review')  await financeNeedsReview(id, { remarks });
       const msgs = {
         approve: '✓ Request approved',
         reject:  '✕ Request rejected',
-        review:  '↺ Sent back for review',
       };
       toast.success(msgs[type]);
       navigate('/finance/queue');
     } catch (e) {
       toast.error(e.response?.data?.message || 'Action failed');
     } finally { setActing(null); }
+  };
+
+  // ── Cloudinary Direct Link Viewer ──────────────────────────────────────────
+  const handleViewFile = (fileUrl) => {
+    if (!fileUrl) {
+      toast.error("File link is not available.");
+      return;
+    }
+    // Securely opens the live Cloudinary URL in a new tab
+    window.open(fileUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (loading) return <Layout><div className="flex items-center justify-center h-64"><LoadingSpinner /></div></Layout>;
@@ -95,7 +111,7 @@ export default function FinanceReviewDetails() {
     <Layout>
       <div className="max-w-2xl mx-auto mt-8">
         <button onClick={() => navigate('/finance/queue')}
-          className="text-xs text-gray-400 hover:text-orange-500 flex items-center gap-1 mb-4">
+          className="text-xs text-gray-400 hover:text-amber-500 flex items-center gap-1 mb-4">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -107,7 +123,7 @@ export default function FinanceReviewDetails() {
           <p className="text-sm font-bold text-red-700 dark:text-red-400">Error loading request</p>
           <p className="text-xs text-red-500 dark:text-red-500 mt-1">{error}</p>
           <button onClick={() => window.location.reload()}
-            className="mt-4 bg-orange-500 hover:bg-orange-600 text-white text-xs
+            className="mt-4 bg-amber-500 hover:bg-amber-600 text-white text-xs
                        font-bold px-4 py-2 rounded-xl transition-colors">
             Retry
           </button>
@@ -121,7 +137,7 @@ export default function FinanceReviewDetails() {
       <div className="flex flex-col items-center justify-center h-64">
         <p className="text-gray-400 dark:text-gray-500">Request not found</p>
         <button onClick={() => navigate('/finance/queue')}
-          className="mt-3 text-xs text-orange-500 hover:underline">
+          className="mt-3 text-xs text-amber-500 hover:underline">
           ← Back to queue
         </button>
       </div>
@@ -138,7 +154,7 @@ export default function FinanceReviewDetails() {
 
         {/* Back */}
         <button onClick={() => navigate('/finance/queue')}
-          className="text-xs text-gray-400 hover:text-orange-500 flex items-center
+          className="text-xs text-gray-400 hover:text-amber-500 flex items-center
                      gap-1 transition-colors">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -159,7 +175,7 @@ export default function FinanceReviewDetails() {
               </p>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-2xl font-black text-orange-500">
+              <p className="text-2xl font-black text-amber-500">
                 {formatCurrency(req.amount)}
               </p>
               <StatusBadge status={req.status} />
@@ -174,8 +190,8 @@ export default function FinanceReviewDetails() {
           {(req.purpose || req.startDate || req.endDate) && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
               {req.purpose && (
-                <div className="bg-orange-50 dark:bg-orange-500/5 rounded-xl p-3
-                                border border-orange-100 dark:border-orange-500/10">
+                <div className="bg-amber-50 dark:bg-amber-500/5 rounded-xl p-3
+                                border border-amber-100 dark:border-amber-500/10">
                   <p className="text-xs text-gray-400 mb-0.5">Purpose</p>
                   <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                     {req.purpose}
@@ -183,8 +199,8 @@ export default function FinanceReviewDetails() {
                 </div>
               )}
               {req.startDate && (
-                <div className="bg-orange-50 dark:bg-orange-500/5 rounded-xl p-3
-                                border border-orange-100 dark:border-orange-500/10">
+                <div className="bg-amber-50 dark:bg-amber-500/5 rounded-xl p-3
+                                border border-amber-100 dark:border-amber-500/10">
                   <p className="text-xs text-gray-400 mb-0.5">Start Date</p>
                   <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                     {formatDate(req.startDate)}
@@ -192,8 +208,8 @@ export default function FinanceReviewDetails() {
                 </div>
               )}
               {req.endDate && (
-                <div className="bg-orange-50 dark:bg-orange-500/5 rounded-xl p-3
-                                border border-orange-100 dark:border-orange-500/10">
+                <div className="bg-amber-50 dark:bg-amber-500/5 rounded-xl p-3
+                                border border-amber-100 dark:border-amber-500/10">
                   <p className="text-xs text-gray-400 mb-0.5">End Date</p>
                   <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                     {formatDate(req.endDate)}
@@ -203,50 +219,45 @@ export default function FinanceReviewDetails() {
             </div>
           )}
 
-          {/* HOD chain */}
-          {req.approvalSteps?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs font-bold text-gray-500 dark:text-gray-400
-                             uppercase tracking-wide mb-2">
-                HOD Approval Chain
-              </p>
-              <div className="space-y-2">
-                {req.approvalSteps.map(step => {
-                  const s = STEP_STYLE[step.status] || STEP_STYLE.WAITING;
-                  return (
-                    <div key={step.id}
-                      className={`flex items-center justify-between p-3 rounded-xl border
-                                  ${s.bg} ${s.border}`}>
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-2 h-2 rounded-full ${s.dot} flex-shrink-0`} />
-                        <div>
-                          <p className={`text-xs font-semibold ${s.text}`}>
-                            Level {step.hodLevel} — {step.approver?.name}
+          {/* ── APPROVAL CHAIN — Managers + Finance ── */}
+          <div className="mb-4">
+            
+            <div className="space-y-2">
+              {req.approvalSteps?.map(step => {
+                const s = STEP_STYLE[step.status] || STEP_STYLE.WAITING;
+                return (
+                  <div key={step.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border
+                                ${s.bg} ${s.border}`}>
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2 h-2 rounded-full ${s.dot} flex-shrink-0`} />
+                      <div>
+                        <p className={`text-xs font-semibold ${s.text}`}>
+                          Level {step.level} — {step.approver?.name}
+                        </p>
+                        {step.remarks && (
+                          <p className="text-xs text-gray-400 italic mt-0.5">
+                            "{step.remarks}"
                           </p>
-                          {step.remarks && (
-                            <p className="text-xs text-gray-400 italic mt-0.5">
-                              "{step.remarks}"
-                            </p>
-                          )}
-                        </div>
+                        )}
                       </div>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-lg
-                                       ${s.bg} ${s.text} border ${s.border}`}>
-                        {s.label}
-                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg
+                                     ${s.bg} ${s.text} border ${s.border}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {/* Finance actions */}
           {isPending && (
-            <div className="border-t border-orange-100 dark:border-orange-500/10 pt-4">
+            <div className="border-t border-amber-100 dark:border-amber-500/10 pt-4">
               <label className="block text-xs font-bold text-gray-500 dark:text-gray-400
-                                 uppercase tracking-wide mb-1.5">
-                Remarks <span className="text-orange-500">*</span>
+                                uppercase tracking-wide mb-1.5">
+                Remarks <span className="text-amber-500">*</span>
                 <span className="normal-case font-normal text-gray-400 ml-1">
                   — required for all actions
                 </span>
@@ -259,18 +270,18 @@ export default function FinanceReviewDetails() {
                 className={`w-full rounded-xl px-4 py-2.5 text-sm resize-none transition-all
                   bg-white dark:bg-black
                   border ${!remarks.trim()
-                    ? 'border-orange-200 dark:border-orange-500/30'
+                    ? 'border-amber-200 dark:border-amber-500/30'
                     : 'border-green-300 dark:border-green-500/30'}
                   text-gray-900 dark:text-white
                   placeholder-gray-400 dark:placeholder-gray-600
-                  focus:outline-none focus:ring-2 focus:ring-orange-500/40`}
+                  focus:outline-none focus:ring-2 focus:ring-amber-500/40`}
               />
               {!remarks.trim() && (
-                <p className="text-xs text-orange-400 mt-1">
+                <p className="text-xs text-amber-400 mt-1">
                   ⚠ Enter remarks before any action
                 </p>
               )}
-              <div className="grid grid-cols-3 gap-3 mt-4">
+              <div className="grid grid-cols-2 gap-3 mt-4">
                 <button
                   onClick={() => handleAction('approve')}
                   disabled={!!acting || !remarks.trim()}
@@ -282,18 +293,6 @@ export default function FinanceReviewDetails() {
                     <span className="w-4 h-4 border-2 border-white border-t-transparent
                                      rounded-full animate-spin" />
                   ) : <><span>✓</span> Approve</>}
-                </button>
-                <button
-                  onClick={() => handleAction('review')}
-                  disabled={!!acting || !remarks.trim()}
-                  className="flex items-center justify-center gap-1.5
-                             bg-orange-500 hover:bg-orange-600 text-white
-                             font-bold rounded-xl py-2.5 text-sm transition-all
-                             disabled:opacity-40 shadow-sm shadow-orange-500/20">
-                  {acting === 'review' ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent
-                                     rounded-full animate-spin" />
-                  ) : <><span>↺</span> Review</>}
                 </button>
                 <button
                   onClick={() => handleAction('reject')}
@@ -334,31 +333,35 @@ export default function FinanceReviewDetails() {
           )}
         </div>
 
-        {/* Attachments */}
-        {req.attachments?.length > 0 && (
+        {/* Attachments — Cloudinary Viewing */}
+        {req.attachments?.filter(a => !a.isDeleted).length > 0 && (
           <div className={card + ' p-5'}>
             <p className="text-sm font-black text-gray-800 dark:text-white mb-3">
-              Attachments ({req.attachments.length})
+              Attachments ({req.attachments.filter(a => !a.isDeleted).length})
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {req.attachments.map(att => (
-                <div key={att.id}
-                  className="flex items-center gap-3 p-3 bg-orange-50
-                             dark:bg-orange-500/5 rounded-xl border border-orange-100
-                             dark:border-orange-500/10">
-                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-500/10 rounded-lg
-                                  flex items-center justify-center text-orange-500 flex-shrink-0 text-sm">
+              {req.attachments.filter(a => !a.isDeleted).map(att => (
+                <button
+                  key={att.id}
+                  type="button"
+                  onClick={() => handleViewFile(att.filePath)} // 👉 Pass the Cloudinary URL here
+                  className="w-full text-left flex items-center gap-3 p-3 bg-gray-50 dark:bg-[#1a1d2e] rounded-xl border border-amber-100 dark:border-[#2a2d3e] hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors group"
+                >
+                  <div className="w-8 h-8 bg-amber-100 dark:bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-500 flex-shrink-0 text-sm">
                     📎
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                       {att.originalName || att.fileName}
                     </p>
                     <p className="text-xs text-gray-400">
                       {att.fileSize ? `${(att.fileSize / 1024).toFixed(1)} KB` : ''}
                     </p>
                   </div>
-                </div>
+                  <svg className="w-3.5 h-3.5 text-gray-400 group-hover:text-amber-500 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </button>
               ))}
             </div>
           </div>
@@ -372,7 +375,7 @@ export default function FinanceReviewDetails() {
             </p>
             <div className="relative">
               <div className="absolute left-4 top-0 bottom-0 w-px
-                              bg-orange-100 dark:bg-orange-500/10" />
+                              bg-amber-100 dark:bg-amber-500/10" />
               <div className="space-y-4">
                 {timeline.map((item, idx) => {
                   if (!item) return null;
@@ -393,8 +396,11 @@ export default function FinanceReviewDetails() {
                             <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
                               {item.actor?.name || 'System'}
                               {item.actorRole && (
-                                <span className="ml-1.5 font-normal text-xs text-gray-400
-                                                 bg-gray-100 dark:bg-[#1a1d2e] px-1.5 py-0.5 rounded">
+                                <span className={`ml-1.5 font-normal text-xs px-1.5 py-0.5 rounded
+                                  ${item.actorRole === 'USER' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' :
+                                    item.actorRole === 'MANAGER' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400' :
+                                    item.actorRole === 'FINANCE' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' :
+                                    'bg-gray-100 dark:bg-[#1a1d2e] text-gray-400'}`}>
                                   {item.actorRole}
                                 </span>
                               )}

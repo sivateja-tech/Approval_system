@@ -1,6 +1,7 @@
+// src/pages/manager/PendingApprovals.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getPendingApprovals } from '../../api/hod.api';
+import { getPendingApprovals } from '../../api/manager.api'; 
 import Layout from '../../components/Layout/Layout';
 import LoadingSpinner from '../../components/UI/LoadingSpinner';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -8,18 +9,33 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 export default function PendingApprovals() {
   const navigate      = useNavigate();
   const pageRef       = useRef(1);
+  const isFirstMount  = useRef(true);
+  
   const [steps, setSteps]     = useState([]);
   const [total, setTotal]     = useState(0);
   const [page, setPage]       = useState(1);
   const [loading, setLoading] = useState(true);
+  
+  // Search States
   const [search, setSearch]   = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
   const LIMIT = 10;
 
-  // fetch with explicit page — no stale closure
-  const fetch = useCallback(async (pg) => {
+  // 1. Debounce the search input (waits 500ms after the user stops typing)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // 2. Update fetch to accept the searchVal
+  const fetchPending = useCallback(async (pg, searchVal) => {
     setLoading(true);
     try {
-      const res = await getPendingApprovals({ page: pg, limit: LIMIT });
+      const params = { page: pg, limit: LIMIT };
+      if (searchVal) params.search = searchVal; // Send to API
+
+      const res = await getPendingApprovals(params);
       setSteps(res.data.data || []);
       setTotal(res.data.pagination?.total || 0);
     } catch {
@@ -27,22 +43,21 @@ export default function PendingApprovals() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetch(1); }, [fetch]);
+  // 3. Trigger API call when debouncedSearch changes
+  useEffect(() => {
+    setPage(1);
+    pageRef.current = 1;
+    fetchPending(1, debouncedSearch);
+  }, [debouncedSearch, fetchPending]);
 
   const handlePage = (pg) => {
     pageRef.current = pg;
     setPage(pg);
-    fetch(pg);
+    fetchPending(pg, debouncedSearch); // Preserve search while paginating
   };
 
-  const displayed = search
-    ? steps.filter(s =>
-        s.fundRequest?.title?.toLowerCase().includes(search.toLowerCase()) ||
-        s.fundRequest?.requestNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        s.fundRequest?.createdBy?.name?.toLowerCase().includes(search.toLowerCase())
-      )
-    : steps;
-
+  // 4. Remove the client-side filter! The backend handles it entirely now.
+  const displayed = steps; 
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -67,14 +82,14 @@ export default function PendingApprovals() {
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search requests…"
               className="pl-8 pr-3 py-2 text-xs bg-white dark:bg-black
-                         border border-orange-200 dark:border-orange-500/30
+                         border border-amber-200 dark:border-amber-500/30
                          rounded-xl text-gray-800 dark:text-gray-200 w-48
-                         focus:outline-none focus:ring-1 focus:ring-orange-400
+                         focus:outline-none focus:ring-1 focus:ring-amber-400
                          placeholder-gray-400 dark:placeholder-gray-600" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#13151f] border border-orange-100
+        <div className="bg-white dark:bg-[#13151f] border border-amber-100
                         dark:border-[#1e2235] rounded-2xl overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-16"><LoadingSpinner /></div>
@@ -82,25 +97,25 @@ export default function PendingApprovals() {
             <div className="flex flex-col items-center justify-center py-16">
               <p className="text-4xl mb-3">✅</p>
               <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-                {search ? 'No matching requests' : 'All caught up!'}
+                {search ? 'No matching requests globally' : 'All caught up!'}
               </p>
             </div>
           ) : (
             <>
               {/* Mobile card view */}
-              <div className="block md:hidden divide-y divide-orange-50 dark:divide-[#1a1d2e]">
+              <div className="block md:hidden divide-y divide-amber-50 dark:divide-[#1a1d2e]">
                 {displayed.map(step => {
                   const req = step.fundRequest;
                   return (
                     <div key={step.id}
-                      onClick={() => navigate(`/hod/requests/${req.id}`)}
-                      className="p-4 hover:bg-orange-50 dark:hover:bg-[#1a1d2e]
+                      onClick={() => navigate(`/manager/requests/${req.id}`)}
+                      className="p-4 hover:bg-amber-50 dark:hover:bg-[#1a1d2e]
                                  cursor-pointer transition-colors">
                       <div className="flex items-start justify-between mb-2">
                         <p className="text-sm font-bold text-gray-800 dark:text-gray-200 flex-1 pr-2">
                           {req.title}
                         </p>
-                        <p className="text-sm font-black text-orange-500 flex-shrink-0">
+                        <p className="text-sm font-black text-amber-500 flex-shrink-0">
                           {formatCurrency(req.amount)}
                         </p>
                       </div>
@@ -119,7 +134,7 @@ export default function PendingApprovals() {
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-orange-50 dark:border-[#1e2235]">
+                    <tr className="border-b border-amber-50 dark:border-[#1e2235]">
                       {['ID', 'Title', 'Requested By', 'Dept', 'Amount', 'Date', 'Level'].map(h => (
                         <th key={h}
                           className="text-left text-xs font-semibold text-gray-400
@@ -129,13 +144,13 @@ export default function PendingApprovals() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-orange-50 dark:divide-[#1a1d2e]">
+                  <tbody className="divide-y divide-amber-50 dark:divide-[#1a1d2e]">
                     {displayed.map(step => {
                       const req = step.fundRequest;
                       return (
                         <tr key={step.id}
-                          onClick={() => navigate(`/hod/requests/${req.id}`)}
-                          className="hover:bg-orange-50 dark:hover:bg-[#1a1d2e]
+                          onClick={() => navigate(`/manager/requests/${req.id}`)}
+                          className="hover:bg-amber-50 dark:hover:bg-[#1a1d2e]
                                      cursor-pointer transition-colors">
                           <td className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500
                                          font-mono whitespace-nowrap">
@@ -143,7 +158,7 @@ export default function PendingApprovals() {
                           </td>
                           <td className="px-4 py-3 max-w-[160px]">
                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200
-                                           truncate hover:text-orange-500 transition-colors">
+                                           truncate hover:text-amber-500 transition-colors">
                               {req.title}
                             </p>
                           </td>
@@ -161,10 +176,10 @@ export default function PendingApprovals() {
                             {formatDate(req.createdAt)}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-xs font-bold bg-orange-100
-                                             dark:bg-orange-500/10 text-orange-600
-                                             dark:text-orange-400 px-2 py-0.5 rounded-lg">
-                              L{step.hodLevel}
+                            <span className="text-xs font-bold bg-amber-100
+                                             dark:bg-amber-500/10 text-amber-600
+                                             dark:text-amber-400 px-2 py-0.5 rounded-lg">
+                              L{step.level}
                             </span>
                           </td>
                         </tr>
@@ -175,9 +190,9 @@ export default function PendingApprovals() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && !search && (
+              {totalPages > 1 && (
                 <div className="flex items-center justify-between px-5 py-3
-                                border-t border-orange-100 dark:border-[#1e2235]">
+                                border-t border-amber-100 dark:border-[#1e2235]">
                   <p className="text-xs text-gray-400 dark:text-gray-500">
                     {(page - 1) * LIMIT + 1}–{Math.min(page * LIMIT, total)} of {total}
                   </p>
@@ -186,8 +201,8 @@ export default function PendingApprovals() {
                       <button key={p} onClick={() => handlePage(p)}
                         className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors
                           ${page === p
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-orange-50 dark:bg-[#1a1d2e] text-gray-500 hover:bg-orange-100'}`}>
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-amber-50 dark:bg-[#1a1d2e] text-gray-500 hover:bg-amber-100'}`}>
                         {p}
                       </button>
                     ))}

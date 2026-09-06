@@ -2,8 +2,6 @@ const router = require('express').Router();
 const {
   requestOTP,
   verifyOTP,
-  register,
-  login,
   getCurrentUser,
   updateProfile
 } = require('../controllers/auth.controller');
@@ -30,22 +28,7 @@ router.post(
   ],
   verifyOTP
 );
-router.post(
-  '/login',
-  [
-    body('email').isEmail(),
-    body('password').notEmpty(),
-    validate,
-  ],
-  login
-);
-router.post('/register', [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Valid email required'),
-  body('password').isLength({ min: 6 }).withMessage('Password min 6 chars'),
-  body('departmentId').isInt({ min: 1 }).withMessage('Department required'),
-  validate,
-], register);
+
 
 router.put('/profile', authenticate, [
   body('name').optional().trim().notEmpty(),

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { requestOTP, verifyOTP } from '../../api/auth.api';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -8,27 +8,26 @@ import toast from 'react-hot-toast';
 // ── Shared input style ──────────────────────────────────────────────────
 const inp = `w-full rounded-xl px-4 py-3 text-sm transition-all
   bg-white dark:bg-black
-  border border-orange-200 dark:border-orange-500/30
+  border border-amber-200 dark:border-amber-500/30
   text-gray-900 dark:text-white
   placeholder-gray-400 dark:placeholder-gray-600
-  focus:outline-none focus:ring-2 focus:ring-orange-500/40
-  focus:border-orange-500 dark:focus:border-orange-400`;
+  focus:outline-none focus:ring-2 focus:ring-amber-500/40
+  focus:border-amber-500 dark:focus:border-amber-400`;
 
 const EmailStep = ({ onOTPSent }) => {
   const [email, setEmail]     = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate               = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await requestOTP(email);
-      toast.success('OTP sent! Check your terminal.');
+      toast.success('OTP sent! Check your email.');
       onOTPSent(email);
     } catch (err) {
       if (err.response?.status === 404) {
-        toast.error('Mail is not found');
+        toast.error('Email not recognized in the system.');
       } else {
         toast.error(err.response?.data?.message || 'Failed to send OTP');
       }
@@ -46,9 +45,9 @@ const EmailStep = ({ onOTPSent }) => {
           placeholder="you@company.com" required autoFocus className={inp} />
       </div>
       <button type="submit" disabled={loading}
-        className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700
+        className="w-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700
                    text-white font-bold py-3 rounded-xl transition-all text-sm
-                   shadow-lg shadow-orange-500/25 disabled:opacity-50
+                   shadow-lg shadow-amber-500/25 disabled:opacity-50
                    hover:scale-[1.02] active:scale-[0.99]">
         {loading ? (
           <span className="flex items-center justify-center gap-2">
@@ -67,7 +66,7 @@ const OTPStep = ({ email, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const { loginUser }         = useAuth();
-  const navigate               = useNavigate();
+  const navigate              = useNavigate();
 
   const handleChange = (i, val) => {
     if (!/^\d*$/.test(val)) return;
@@ -96,7 +95,9 @@ const OTPStep = ({ email, onBack }) => {
       const { token, user } = res.data.data;
       loginUser(token, user);
       toast.success(`Welcome, ${user.name}! 👋`);
-      const redirects = { USER: '/dashboard', HOD: '/hod/dashboard', FINANCE: '/finance/dashboard' };
+      
+      // Updated HOD to MANAGER and the route to /manager/dashboard
+      const redirects = { USER: '/dashboard', MANAGER: '/manager/dashboard', FINANCE: '/finance/dashboard' };
       navigate(redirects[user.role] || '/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid OTP');
@@ -115,21 +116,21 @@ const OTPStep = ({ email, onBack }) => {
         if (v <= 1) { clearInterval(t); return 0; } return v - 1;
       }), 1000);
       document.getElementById('otp-0')?.focus();
-    } catch { toast.error('Failed'); }
+    } catch { toast.error('Failed to resend OTP'); }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Sent-to banner */}
-      <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-500/10
-                      border border-orange-200 dark:border-orange-500/20
+      <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-500/10
+                      border border-amber-200 dark:border-amber-500/20
                       rounded-xl px-4 py-3">
         <div>
-          <p className="text-xs text-orange-500 dark:text-orange-400">OTP sent to</p>
-          <p className="text-sm font-bold text-orange-700 dark:text-orange-300">{email}</p>
+          <p className="text-xs text-amber-500 dark:text-amber-400">OTP sent to</p>
+          <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{email}</p>
         </div>
         <button type="button" onClick={onBack}
-          className="text-xs text-orange-500 hover:text-orange-700 font-bold">
+          className="text-xs text-amber-500 hover:text-amber-700 font-bold">
           Change
         </button>
       </div>
@@ -148,12 +149,12 @@ const OTPStep = ({ email, onBack }) => {
               onKeyDown={e => handleKeyDown(i, e)}
               onPaste={i === 0 ? handlePaste : undefined}
               className={`w-11 h-12 text-center text-xl font-black rounded-xl border
-                         focus:outline-none focus:ring-2 focus:ring-orange-500/40
+                         focus:outline-none focus:ring-2 focus:ring-amber-500/40
                          transition-all bg-white dark:bg-black
                          text-gray-900 dark:text-white
                          ${digit
-                           ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10'
-                           : 'border-orange-200 dark:border-orange-500/30'}`}
+                           ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10'
+                           : 'border-amber-200 dark:border-amber-500/30'}`}
             />
           ))}
         </div>
@@ -163,9 +164,9 @@ const OTPStep = ({ email, onBack }) => {
       </div>
 
       <button type="submit" disabled={loading || otp.join('').length !== 6}
-        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold
+        className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold
                    py-3 rounded-xl transition-all text-sm shadow-lg
-                   shadow-orange-500/25 disabled:opacity-50
+                   shadow-amber-500/25 disabled:opacity-50
                    hover:scale-[1.02] active:scale-[0.99]">
         {loading ? (
           <span className="flex items-center justify-center gap-2">
@@ -181,7 +182,7 @@ const OTPStep = ({ email, onBack }) => {
           <p className="text-xs text-gray-400 dark:text-gray-600">Resend in {resendTimer}s</p>
         ) : (
           <button type="button" onClick={handleResend}
-            className="text-xs text-orange-500 hover:text-orange-600 font-bold
+            className="text-xs text-amber-500 hover:text-amber-600 font-bold
                        hover:underline">
             Didn't receive it? Resend OTP
           </button>
@@ -203,17 +204,17 @@ export default function Login() {
       {/* Dark mode toggle */}
       <button onClick={toggle}
         className="fixed top-4 right-4 w-10 h-10 rounded-xl
-                   bg-orange-50 dark:bg-orange-500/10
-                   border border-orange-200 dark:border-orange-500/30
+                   bg-amber-50 dark:bg-amber-500/10
+                   border border-amber-200 dark:border-amber-500/30
                    flex items-center justify-center
                    hover:scale-105 transition-transform z-10">
         {dark ? (
-          <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         ) : (
-          <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
           </svg>
@@ -222,18 +223,18 @@ export default function Login() {
 
       <div className="w-full max-w-[420px]">
         {/* Card */}
-        <div className="bg-white dark:bg-[#0a0a0a] border border-orange-100
-                        dark:border-orange-500/20 rounded-3xl shadow-2xl
-                        dark:shadow-orange-500/5 overflow-hidden">
+        <div className="bg-white dark:bg-[#0a0a0a] border border-amber-100
+                        dark:border-amber-500/20 rounded-3xl shadow-2xl
+                        dark:shadow-amber-500/5 overflow-hidden">
 
           {/* Header band */}
-          <div className="bg-orange-500 px-8 py-7 text-white">
+          <div className="bg-amber-500 px-8 py-7 text-white">
             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center
                             justify-center mx-auto mb-4 text-2xl font-black">
               ₹
             </div>
             <h1 className="text-xl font-black text-center">Fund Request System</h1>
-            <p className="text-orange-100 text-sm text-center mt-1">
+            <p className="text-amber-100 text-sm text-center mt-1">
               {step === 1 ? 'Sign in with your work email' : 'Enter your one-time password'}
             </p>
 
@@ -252,21 +253,18 @@ export default function Login() {
               : <OTPStep email={email} onBack={() => { setStep(1); setEmail(''); }} />
             }
 
-            {/* Divider + register link */}
-            
-
             {/* Test accounts */}
-            <div className="mt-4 bg-orange-50 dark:bg-orange-500/5
-                            border border-orange-100 dark:border-orange-500/10
+            <div className="mt-4 bg-amber-50 dark:bg-amber-500/5
+                            border border-amber-100 dark:border-amber-500/10
                             rounded-2xl p-4">
-              <p className="text-xs font-bold text-orange-600 dark:text-orange-400
+              <p className="text-xs font-bold text-amber-600 dark:text-amber-400
                              uppercase tracking-widest mb-2">
                 Demo Accounts
               </p>
               <div className="space-y-1 text-xs text-gray-500 dark:text-gray-500">
-                <p>USER  — john.doe@company.com</p>
-                <p>HOD L1  — hod1@company.com</p>
-                <p>HOD L2  — hod2@company.com</p>
+                <p>USER    — tharun@company.com</p>
+                <p>MANAGER L1 — manish@company.com</p>
+                <p>MANAGER L2 — ravi@company.com</p>
                 <p>FINANCE — finance@company.com</p>
                 <p className="text-gray-400 dark:text-gray-700 pt-1">
                   OTP prints to server terminal (dev mode)

@@ -7,41 +7,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─────────────────────────────────────────────
-// ENUMS
-// ─────────────────────────────────────────────
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 enum Role {
   USER
-  HOD
+  MANAGER
   FINANCE
 }
 
 enum RequestStatus {
   DRAFT
   SUBMITTED
-  PENDING_HOD_APPROVAL
-  HOD_APPROVED
+  PENDING_MANAGER_APPROVAL
+  MANAGER_APPROVED
   PENDING_FINANCE_APPROVAL
   FINANCE_APPROVED
   FINANCE_REJECTED
   NEEDS_REVIEW
-  RESUBMITTED
+  REJECTED
   CANCELLED
+  RESUBMITTED
 }
 
 enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
-  SKIPPED
-  WAITING
+  SKIPPED        // approver was bypassed because a peer at same/higher level already acted
+  INELIGIBLE     // NEW: approver's limit was too low — never shown this request at all
+  WAITING        // waiting for a lower level to act first (kept for future sequential mode)
+}
+
+// NEW: Why an ApprovalStep was never shown to an approver
+enum IneligibleReason {
+  LIMIT_TOO_LOW    // approver's approvalLimit < request amount
+  LEVEL_TOO_LOW    // approver's level <= requester's level
 }
 
 enum FinanceAction {
   APPROVED
   REJECTED
-  NEEDS_REVIEW
+  
 }
 
 enum NotificationType {
@@ -50,13 +56,10 @@ enum NotificationType {
   REQUEST_REJECTED
   FINANCE_REVIEW
   STATUS_UPDATE
-  COMMENT_ADDED
   NEEDS_REVIEW
 }
 
-// ─────────────────────────────────────────────
-// MODELS
-// ─────────────────────────────────────────────
+// ─── DEPARTMENT ───────────────────────────────────────────────────────────────
 
 model Department {
   id          Int      @id @default(autoincrement())
@@ -67,88 +70,166 @@ model Department {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users        User[]
-  hodHierarchy HODHierarchy[]
+  users               User[]
+  approvalHierarchies ApprovalHierarchy[]
 
   @@index([code])
 }
 
-model User {
-  id              Int      @id @default(autoincrement())
-  name            String
-  email           String   @unique
-  password        String
-  role            Role     @default(USER)
-  departmentId    Int
-  approvalLimit   Decimal  @default(0) @db.Decimal(15, 2)
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  deletedAt       DateTime?
-  loginHistory LoginHistory[]
-  department       Department     @relation(fields: [departmentId], references: [id])
-  fundRequests     FundRequest[]  @relation("RequestCreator")
-  approvalSteps    ApprovalStep[] @relation("StepApprover")
-  financeReviews   FinanceReview[]
-  comments         Comment[]
-  notifications    Notification[] @relation("NotificationRecipient")
-  otpTokens OTPToken[]
-  workflowHistory  WorkflowHistory[]
-  hodLevel         HODHierarchy?  @relation("HODUser")
+// ─── APPROVAL HIERARCHY ───────────────────────────────────────────────────────
+// A department can have MULTIPLE hierarchies.
+// Each user is assigned to exactly one hierarchy via approvalHierarchyId.
 
-  @@index([email])
-  @@index([role])
-  @@index([departmentId])
-}
-
-model HODHierarchy {
+model ApprovalHierarchy {
   id           Int      @id @default(autoincrement())
-  userId       Int      @unique
   departmentId Int
-  level        Int      // 1 = first approver, 2 = second, etc.
+  name         String
+  description  String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user       User       @relation("HODUser", fields: [userId], references: [id])
-  department Department @relation(fields: [departmentId], references: [id])
+  department Department      @relation(fields: [departmentId], references: [id])
+  steps      HierarchyStep[]
+  users      User[]
 
-  @@unique([departmentId, level])
-  @@index([departmentId, level])
+  @@index([departmentId])
+  @@index([isActive])
 }
 
-model FundRequest {
-  id              Int           @id @default(autoincrement())
-  requestNumber   String        @unique
-  title           String
-  description     String        @db.Text
-  amount          Decimal       @db.Decimal(15, 2)
-  purpose         String?
-  status          RequestStatus @default(DRAFT)
-  createdById     Int
-  currentLevel    Int           @default(0) // current HOD level being processed
-  totalHodLevels  Int           @default(0)
-  submittedAt     DateTime?
-  completedAt     DateTime?
-  startDate       DateTime?
-  endDate         DateTime?
-  isModified      Boolean   @default(false)
-  modifiedAt      DateTime?
-  modifiedCount   Int       @default(0)
-  fundUsed        Boolean   @default(false)
-  fundReturnNote  String?   @db.Text
-  isDeleted       Boolean       @default(false)
-  deletedAt       DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  viewedByHODAt     DateTime?
-  viewedByFinanceAt DateTime?
-  isLockedForEdit   Boolean   @default(false)
+// ─── HIERARCHY STEP ───────────────────────────────────────────────────────────
+// One row per approver per level in a hierarchy.
+// level is a plain integer — lower = earlier in chain.
+// approvalLimit is DENORMALIZED here as a snapshot of the approver's limit
+// at the time the hierarchy was configured. This prevents stale eligibility
+// checks if an admin later edits a manager's User.approvalLimit.
 
-  createdBy       User            @relation("RequestCreator", fields: [createdById], references: [id])
+model HierarchyStep {
+  id                    Int      @id @default(autoincrement())
+  hierarchyId           Int
+  approverId            Int
+  level                 Int      // 0 = requester-equivalent, 1 = first approver, N = highest
+  // NEW: snapshot of approver's approvalLimit at hierarchy config time
+  approvalLimitSnapshot Decimal  @db.Decimal(15, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  hierarchy ApprovalHierarchy @relation(fields: [hierarchyId], references: [id], onDelete: Cascade)
+  approver  User               @relation("HierarchyApprover", fields: [approverId], references: [id])
+
+  @@unique([hierarchyId, level])
+  @@unique([hierarchyId, approverId])
+  @@index([hierarchyId])
+  @@index([approverId])
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+// approvalLimit = 0  → can raise requests only, cannot approve anything.
+// approvalLimit > 0  → can approve requests whose amount ≤ their limit,
+//                      provided they are at a higher level than the requester.
+// hierarchyLevel: the user's resolved level within their assigned hierarchy.
+// Stored here as a convenience so submission logic doesn't need a join every time.
+
+model User {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String    @unique
+  role                Role      @default(USER)
+  departmentId        Int
+  approvalLimit       Decimal   @default(0) @db.Decimal(15, 2)
+  approvalHierarchyId Int?
+  // NEW: mirrors HierarchyStep.level for this user's position in their hierarchy.
+  // Null when approvalHierarchyId is null (no chain → direct to Finance).
+  // Must be kept in sync whenever HierarchyStep is updated for this user.
+  hierarchyLevel      Int?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  department        Department         @relation(fields: [departmentId], references: [id])
+  approvalHierarchy ApprovalHierarchy? @relation(fields: [approvalHierarchyId], references: [id])
+
+  fundRequests    FundRequest[]     @relation("RequestCreator")
+  approvalSteps   ApprovalStep[]    @relation("StepApprover")
+  financeReviews  FinanceReview[]
+  notifications   Notification[]    @relation("NotificationRecipient")
+  workflowHistory WorkflowHistory[] @relation("HistoryActor")
+  loginHistory    LoginHistory[]
+  hierarchySteps  HierarchyStep[]   @relation("HierarchyApprover")
+
+  @@index([email])
+  @@index([role])
+  @@index([departmentId])
+  @@index([approvalHierarchyId])
+  @@index([hierarchyLevel]) // NEW: used to find "highest level in hierarchy" quickly
+}
+
+// ─── FUND REQUEST ─────────────────────────────────────────────────────────────
+//
+// NEW fields:
+//   requesterLevel        — snapshot of requester's hierarchyLevel at submission time.
+//   bypassedToFinance     — true when amount ≤ requester's own approvalLimit
+//                           (request skips all managers and goes straight to Finance).
+//   approvedByUserId      — FK to the manager who approved (single-approver model).
+//   approvedByName        — denormalized display string, e.g. "Kishore".
+//   rejectedByUserId      — FK to the actor who rejected.
+//   rejectedByName        — denormalized display string, e.g. "Manish".
+//   rejectionSource       — 'MANAGER' | 'FINANCE' so UI can render the right label.
+//   isRejectedPermanently — true once rejected; blocks resubmission at the API layer.
+
+model FundRequest {
+  id            Int           @id @default(autoincrement())
+  requestNumber String        @unique
+  title         String
+  description   String        @db.Text
+  amount        Decimal       @db.Decimal(15, 2)
+  purpose       String?
+  startDate     DateTime?
+  endDate       DateTime?
+  fundUsed      Boolean       @default(false)
+  status        RequestStatus @default(DRAFT)
+  createdById   Int
+
+  hierarchyId           Int?
+  // NEW: requester's level at submission time (for eligibility snapshot)
+  requesterLevel        Int?
+  // NEW: set true when amount ≤ requester's own approvalLimit → bypass managers
+  bypassedToFinance     Boolean  @default(false)
+
+  currentLevel  Int @default(0)
+  totalLevels   Int @default(0)
+  approvalCycle Int @default(1)
+
+  submittedAt DateTime?
+  completedAt DateTime?
+
+  viewedByManagerAt DateTime?
+  viewedByFinanceAt DateTime?
+
+  isModified    Boolean   @default(false)
+  modifiedAt    DateTime?
+  modifiedCount Int       @default(0)
+
+  // NEW: who approved (manager stage) — populated once a manager approves
+  approvedByUserId Int?
+  approvedByName   String? // e.g. "Kishore" — display-ready
+
+  // NEW: who rejected (manager or finance stage)
+  rejectedByUserId       Int?
+  rejectedByName         String? // e.g. "Ravi"
+  rejectionSource        String? // 'MANAGER' | 'FINANCE'
+  // NEW: once true the service layer must block any resubmit attempt
+  isRejectedPermanently  Boolean @default(false)
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  createdBy       User              @relation("RequestCreator", fields: [createdById], references: [id])
   approvalSteps   ApprovalStep[]
   financeReviews  FinanceReview[]
-  comments        Comment[]
   attachments     Attachment[]
   notifications   Notification[]
   workflowHistory WorkflowHistory[]
@@ -156,18 +237,48 @@ model FundRequest {
   @@index([createdById])
   @@index([status])
   @@index([requestNumber])
+  @@index([hierarchyId])
+  @@index([approvalCycle])
+  @@index([approvedByUserId])  // NEW
+  @@index([rejectedByUserId])  // NEW
+  @@index([bypassedToFinance]) // NEW
 }
 
+// ─── APPROVAL STEP ────────────────────────────────────────────────────────────
+//
+// CHANGED behaviour (schema additions):
+//   isEligible       — false when the approver's limit < request amount OR
+//                      approver's level ≤ requester's level.
+//                      INELIGIBLE steps are created for the audit trail but
+//                      are NEVER surfaced to that approver in queries.
+//   ineligibleReason — why the step was marked ineligible (enum).
+//   approvalLimitAtTime — snapshot of approver's limit when the step was created.
+//
+// Eligibility filter rule (enforced in every "pending approvals" query):
+//   WHERE isEligible = true AND status = 'PENDING'
+//
+// Once ONE eligible approver acts:
+//   • Their step → APPROVED / REJECTED
+//   • All other eligible PENDING steps for the same request+cycle → SKIPPED
+//   • INELIGIBLE steps remain untouched (audit only)
+
 model ApprovalStep {
-  id             Int            @id @default(autoincrement())
-  fundRequestId  Int
-  approverId     Int
-  hodLevel       Int
-  status         ApprovalStatus @default(WAITING)
-  remarks        String?        @db.Text
-  actionAt       DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id            Int            @id @default(autoincrement())
+  fundRequestId Int
+  approverId    Int
+  level         Int
+  cycle         Int            @default(1)
+  status        ApprovalStatus @default(PENDING)
+  remarks       String?        @db.Text
+  actionAt      DateTime?
+
+  // NEW eligibility fields
+  isEligible          Boolean          @default(true)
+  ineligibleReason    IneligibleReason?
+  approvalLimitAtTime Decimal          @db.Decimal(15, 2) // snapshot at step creation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
   approver    User        @relation("StepApprover", fields: [approverId], references: [id])
@@ -175,7 +286,13 @@ model ApprovalStep {
   @@index([fundRequestId])
   @@index([approverId])
   @@index([status])
+  @@index([cycle])
+  @@index([fundRequestId, cycle])
+  @@index([approverId, status])
+  @@index([isEligible, status]) // NEW: primary index for "show me my pending requests"
 }
+
+// ─── FINANCE REVIEW ───────────────────────────────────────────────────────────
 
 model FinanceReview {
   id            Int           @id @default(autoincrement())
@@ -194,20 +311,7 @@ model FinanceReview {
   @@index([reviewedById])
 }
 
-model Comment {
-  id            Int      @id @default(autoincrement())
-  fundRequestId Int
-  userId        Int
-  content       String   @db.Text
-  isDeleted     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id])
-
-  @@index([fundRequestId])
-}
+// ─── ATTACHMENT ───────────────────────────────────────────────────────────────
 
 model Attachment {
   id            Int      @id @default(autoincrement())
@@ -217,7 +321,6 @@ model Attachment {
   fileType      String
   fileSize      Int
   filePath      String
-  uploadedAt    DateTime @default(now())
   isDeleted     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -226,6 +329,8 @@ model Attachment {
 
   @@index([fundRequestId])
 }
+
+// ─── NOTIFICATION ─────────────────────────────────────────────────────────────
 
 model Notification {
   id            Int              @id @default(autoincrement())
@@ -245,42 +350,57 @@ model Notification {
   @@index([userId, isRead])
   @@index([fundRequestId])
 }
-model OTPToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  token     String
-  expiresAt DateTime
-  isUsed    Boolean  @default(false)
-  createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ─── WORKFLOW HISTORY ─────────────────────────────────────────────────────────
+// Complete audit trail across ALL cycles.
+//
+// metadata shape (updated):
+// {
+//   level: number,
+//   hierarchyId: number,
+//   cycle: number,
+//   totalManagers: number,
+//   eligibleManagers: number,     // NEW: how many managers were eligible for this request
+//   approverName: string,         // NEW: populated on MANAGER_APPROVED / MANAGER_REJECTED
+//   approverLimit: number,        // NEW: their limit at time of action
+//   requestAmount: number,        // NEW: for quick audit without joining FundRequest
+//   bypassedToFinance: boolean,   // NEW: true when manager stage was skipped
+//   ineligibleReason?: string     // NEW: present on INELIGIBLE_SKIPPED actions
+// }
 
-  @@index([userId])
-  @@index([token])
-}
 model WorkflowHistory {
-  id            Int      @id @default(autoincrement())
+  id            Int            @id @default(autoincrement())
   fundRequestId Int
   actorId       Int
-  actorRole     Role
+  actorRole     String
   action        String
+  // Extended action constants (service layer should use these strings):
+  // SUBMITTED | BYPASSED_TO_FINANCE | MANAGER_APPROVED | MANAGER_REJECTED |
+  // INELIGIBLE_SKIPPED | PEER_SKIPPED | FINANCE_APPROVED | FINANCE_REJECTED |
+  // FINANCE_NEEDS_REVIEW | RESUBMITTED | CANCELLED
   fromStatus    RequestStatus?
   toStatus      RequestStatus?
-  remarks       String?  @db.Text
+  remarks       String?        @db.Text
+  approvalCycle Int            @default(1)
   metadata      Json?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime       @default(now())
 
   fundRequest FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
-  actor       User        @relation(fields: [actorId], references: [id])
+  actor       User        @relation("HistoryActor", fields: [actorId], references: [id])
 
   @@index([fundRequestId])
   @@index([actorId])
+  @@index([approvalCycle])
+  @@index([fundRequestId, approvalCycle])
 }
+
+// ─── LOGIN HISTORY ────────────────────────────────────────────────────────────
+
 model LoginHistory {
   id        Int      @id @default(autoincrement())
-  userId    Int?     // null if email doesn't exist
+  userId    Int?
   email     String
-  action    String   // 'REGISTER' | 'OTP_REQUEST' | 'LOGIN_SUCCESS' | 'LOGIN_FAILED'
+  action    String
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -289,4 +409,18 @@ model LoginHistory {
 
   @@index([userId])
   @@index([email])
+}
+
+// ─── OTP TOKEN ────────────────────────────────────────────────────────────────
+
+model OTPToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @db.VarChar(200)
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isUsed])
 }

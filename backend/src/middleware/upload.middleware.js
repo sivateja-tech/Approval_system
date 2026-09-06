@@ -1,28 +1,28 @@
 const multer = require('multer');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../uploads'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  },
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('cloudinary').v2;
+
+// Configure Cloudinary with your .env credentials
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
-const fileFilter = (req, file, cb) => {
-  const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error('File type not allowed. Allowed: PDF, Images, DOC/DOCX'), false);
+
+// Configure Multer to use Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'fund_requests', // Creates a folder in your Cloudinary account
+    resource_type: 'auto',   // IMPORTANT: Allows PDFs, Docs, and spreadsheets (not just images)
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv']
   }
-};
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
+
+// 10MB file size limit
+const upload = multer({ 
+  storage: storage, 
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
 module.exports = upload;

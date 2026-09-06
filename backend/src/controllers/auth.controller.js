@@ -15,18 +15,6 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
   const result = await authService.verifyOTP(email, otp,req);
   return success(res, result, 'Login successful');
 });
-exports.login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  const result = await authService.login(email, password);
-  return success(res, result, 'Login successful');
-});
-// Add to existing auth.controller.js
-
-exports.register = asyncHandler(async (req, res) => {
-  const result = await authService.register(req.body,req);
-  return success(res, result, 'Registration successful', 201);
-});
-
 exports.updateProfile = asyncHandler(async (req, res) => {
   const result = await authService.updateProfile(req.user.id, req.body);
   return success(res, result, 'Profile updated');

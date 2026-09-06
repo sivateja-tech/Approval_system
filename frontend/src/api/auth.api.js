@@ -1,3 +1,4 @@
+// auth.api.js
 import api from './axios';
 
 export const requestOTP = (email) =>
@@ -8,7 +9,3 @@ export const verifyOTP = (email, otp) =>
 
 export const getCurrentUser = () =>
   api.get('/auth/me');
-
-// Legacy (keep if you want the password fallback)
-export const login = (data) =>
-  api.post('/auth/login', data);
