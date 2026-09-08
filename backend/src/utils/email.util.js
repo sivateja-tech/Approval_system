@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+/*const nodemailer = require('nodemailer');
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.EMAIL_PORT || '587', 10),
@@ -53,6 +53,69 @@ const verifyEmailConnection = async () => {
     console.log('✅ Email service connected');
   } catch (err) {
     console.warn('⚠️  Email service not configured:', err.message);
+  }
+};
+
+module.exports = { sendOTPEmail, verifyEmailConnection };*/
+
+
+const { Resend } = require('resend');
+
+// Initialize Resend with your API Key
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const sendOTPEmail = async (toEmail, userName, otp) => {
+  const expiryMinutes = process.env.OTP_EXPIRES_MINUTES || 10;
+  
+  try {
+    const data = await resend.emails.send({
+      // You must use onboarding@resend.dev until you verify a custom domain in Resend
+      from: 'Fund Request System <onboarding@resend.dev>',
+      to: toEmail,
+      subject: 'Your Login OTP — Fund Request System',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+          <h2 style="color: #1d4ed8; margin-bottom: 8px;">Fund Request System</h2>
+          <p style="color: #374151; margin-bottom: 24px;">Hello <strong>${userName}</strong>,</p>
+
+          <p style="color: #374151;">Your one-time login code is:</p>
+
+          <div style="background: #eff6ff; border: 2px dashed #3b82f6; border-radius: 12px;
+                      padding: 24px; text-align: center; margin: 20px 0;">
+            <span style="font-size: 40px; font-weight: bold; letter-spacing: 12px; color: #1d4ed8;">
+              ${otp}
+            </span>
+          </div>
+
+          <p style="color: #6b7280; font-size: 14px;">
+            This code expires in <strong>${expiryMinutes} minutes</strong>.
+            Do not share it with anyone.
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #9ca3af; font-size: 12px;">
+            If you did not request this code, ignore this email.
+            Your account is safe.
+          </p>
+        </div>
+      `,
+    });
+
+    console.log(`✅ Email successfully sent to ${toEmail}. ID:`, data.id);
+    return data;
+  } catch (error) {
+    console.error('❌ Resend failed to send email:', error);
+    throw new Error('Email delivery failed');
+  }
+};
+
+// Resend doesn't have a verify() method like Nodemailer, 
+// so we just check if the API key exists.
+const verifyEmailConnection = async () => {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️  RESEND_API_KEY is missing from environment variables!');
+  } else {
+    console.log('✅ Resend API Key found and configured');
   }
 };
 
